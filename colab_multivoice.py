@@ -35,19 +35,34 @@ INPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
-# Voice mapping for different speaker types
+# Voice mapping for different speaker types - multiple options per gender
 SPEAKER_VOICES = {
-    "male": "en-US-GuyNeural",      # Male adult
-    "female": "en-US-AriaNeural",    # Female adult  
-    "child": "en-US-SaraNeural",    # Child
-    "elder": "en-US-EmmaNeural",    # Elder
+    # Male voices (different tones)
+    "male_1": "en-US-GuyNeural",      # Deep male
+    "male_2": "en-US-RyanNeural",    # Medium male
+    "male_3": "en-US-DavisNeural",   # Professional male
+    
+    # Female voices (different tones)
+    "female_1": "en-US-AriaNeural",  # Female adult
+    "female_2": "en-US-JennyNeural",   # Female medium
+    "female_3": "en-US-SaraNeural", # Female light
+    
+    # Child/Elder
+    "child": "en-US-SaraNeural",   
+    "elder": "en-US-EmmaNeural",    
+    
     "default": "en-US-AriaNeural"
 }
 
-# Voice characteristics for detection
-MALE_KEYWORDS = ["他", "他", "老公", "爸爸", "儿子", "哥", "先生", "男士", "男人"]
-FEMALE_KEYWORDS = ["她", "她", "老婆", "妈妈", "女儿", "姐", "女士", "女人", "女孩"]
-CHILD_KEYWORDS = ["小孩", "孩子", "小朋友", "宝宝", "童"]
+# Extended keywords for better detection
+MALE_KEYWORDS = ["他", "老公", "爸爸", "儿子", "哥", "先生", "男士", "男人", "丈夫", "父亲", "男孩", "小哥", "老"]
+FEMALE_KEYWORDS = ["她", "老婆", "妈妈", "女儿", "姐", "女士", "女人", "妻子", "母亲", "女孩", "小姐", "姑"]
+CHILD_KEYWORDS = ["小孩", "孩子", "小朋友", "宝宝", "童", "小孩", "娃"]
+ELDER_KEYWORDS = ["爷爷", "奶奶", "叔叔", "阿姨", "老师", "老爷", "老", "爷爷", "奶奶"]
+
+# Voice alternation for same gender - to distinguish 2 males or 2 females
+MALE_VOICES = ["en-US-GuyNeural", "en-US-RyanNeural", "en-US-DavisNeural"]
+FEMALE_VOICES = ["en-US-AriaNeural", "en-US-JennyNeural", "en-US-SaraNeural"]
 
 
 @dataclass
@@ -60,6 +75,7 @@ class Segment:
     speaker: Optional[str] = None
     speaker_id: int = 0
     audio_file: Optional[str] = None
+    voice: Optional[str] = None
     
 
 def install_dependencies():
@@ -93,26 +109,47 @@ def extract_audio(video_path: str, audio_path: str):
 
 
 def detect_speaker_type(text: str) -> str:
-    """Simple heuristic to detect speaker type from Chinese text context."""
-    text = text[:100]  # Check first 100 chars
+    """Detect speaker type from Chinese text context."""
+    text = text[:150]  # Check more context
     
-    # Count keywords
-    male_score = sum(1 for w in MALE_KEYWORDS if w in text)
-    female_score = sum(1 for w in FEMALE_KEYWORDS if w in text)
-    child_score = sum(1 for w in CHILD_KEYWORDS if w in text)
-    
-    # Check for honorifics that indicate elder
-    if any(w in text for w in ["爷爷", "奶奶", "叔叔", "阿姨", "老师", "老爷"]):
+    # Check for elder first (most distinct)
+    if any(w in text for w in ELDER_KEYWORDS):
         return "elder"
     
-    if child_score > 0:
+    # Check for child
+    if any(w in text for w in CHILD_KEYWORDS):
         return "child"
-    if male_score > female_score and male_score > 0:
-        return "male"
+    
+    # Count keywords for male/female
+    male_score = sum(1 for w in MALE_KEYWORDS if w in text)
+    female_score = sum(1 for w in FEMALE_KEYWORDS if w in text)
+    
     if female_score > male_score and female_score > 0:
         return "female"
+    if male_score > female_score and male_score > 0:
+        return "male"
     
     return "default"
+
+
+def get_voice_for_speaker(speaker_type: str, speaker_id: int) -> str:
+    """Get appropriate voice based on speaker type and ID.
+    
+    For same gender speakers, alternates between different voice tones
+    to distinguish them.
+    """
+    if speaker_type == "elder":
+        return "en-US-EmmaNeural"
+    if speaker_type == "child":
+        return "en-US-SaraNeural"
+    if speaker_type == "male":
+        # Alternate between different male voices
+        return MALE_VOICES[speaker_id % len(MALE_VOICES)]
+    if speaker_type == "female":
+        # Alternate between different female voices  
+        return FEMALE_VOICES[speaker_id % len(FEMALE_VOICES)]
+    
+    return "en-US-AriaNeural"
 
 
 def transcribe_with_diarization(audio_path: str, model_size: str = "medium") -> List[Segment]:
@@ -230,30 +267,32 @@ def generate_speech_async(text: str, output_path: str, voice: str = "en-US-AriaN
 
 
 def generate_segment_audio(segments: List[Segment], temp_dir: Path):
-    """Generate TTS for each segment with correct voice."""
+    """Generate TTS for each segment with correct voice based on speaker ID."""
     print("Generating audio for each segment...")
     
-    # Group segments by speaker type for consistent voice
-    speaker_voices = {}
+    # Track voice per speaker for consistency
+    speaker_voice_map = {}  # speaker_id -> voice
     
     for i, seg in enumerate(segments):
-        # Get voice for speaker type
-        voice = SPEAKER_VOICES.get(seg.speaker, SPEAKER_VOICES["default"])
+        # Get unique voice based on speaker type and ID
+        # This ensures 2 different males get different voice tones
+        voice_key = f"{seg.speaker}_{seg.speaker_id}"
         
-        # Alternate between similar speakers for same character consistency
-        voice_key = (seg.speaker, seg.speaker_id)
-        if voice_key not in speaker_voices:
-            speaker_voices[voice_key] = voice
+        if voice_key not in speaker_voice_map:
+            speaker_voice_map[voice_key] = get_voice_for_speaker(seg.speaker, seg.speaker_id)
+        
+        voice = speaker_voice_map[voice_key]
+        seg.voice = voice
         
         output_file = temp_dir / f"seg_{i}.mp3"
         seg.audio_file = str(output_file)
         
-        print(f"  Segment {i+1}: {seg.text_en[:40]}... ({seg.speaker})")
+        print(f"  {i+1}: {seg.text_en[:35]}... [{seg.speaker}#{seg.speaker_id} = {voice}]")
         
-        generate_speech_async(seg.text_en, str(output_file), speaker_voices[voice_key])
+        generate_speech_async(seg.text_en, str(output_file), voice)
     
-    # Wait for all to complete
-    time.sleep(1)
+    # Wait for all TTS to complete
+    time.sleep(2)
 
 
 def create_subtitle_file(segments: List[Segment], output_path: str):
