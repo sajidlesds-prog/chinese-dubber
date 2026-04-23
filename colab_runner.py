@@ -48,11 +48,11 @@ for f in files:
         "--target_dir", str(OUTPUT_DIR),
         "--source_language_code", "zh",
         "--target_language_code", "en",
-        "--asr_name", "faster_whisper",
-        "--whisper_model", "medium",
-        "--translate_name", "google",
-        "--tts_name", "edgetts",
-        "--voice_name", "en-US-AriaNeural",
+        "--recogn_type", "0",
+        "--model_name", "medium",
+        "--translate_type", "0",
+        "--tts_type", "0",
+        "--voice_role", "en-US-AriaNeural",
         "--subtitle_type", "1"
     ]
     
