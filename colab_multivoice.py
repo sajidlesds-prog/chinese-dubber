@@ -92,6 +92,12 @@ FEMALE_VOICES = [
 MALE_VOICES.extend(["en-US-GuyNeural"] * 10)  # Repeat if needed
 FEMALE_VOICES.extend(["en-US-AriaNeural"] * 5)
 
+# Keywords for speaker detection
+MALE_KEYWORDS = ["他", "老公", "爸爸", "儿子", "哥", "先生", "男士", "男人", "丈夫", "父亲", "男孩", "小哥", "老"]
+FEMALE_KEYWORDS = ["她", "老婆", "妈妈", "女儿", "姐", "女士", "女人", "妻子", "母亲", "女孩", "小姐", "姑"]
+CHILD_KEYWORDS = ["小孩", "孩子", "小朋友", "宝宝", "童", "小孩", "娃"]
+ELDER_KEYWORDS = ["爷爷", "奶奶", "叔叔", "阿姨", "老师", "老爷", "老", "爷爷", "奶奶"]
+
 
 @dataclass
 class Segment:
