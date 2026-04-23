@@ -92,6 +92,41 @@ FEMALE_VOICES = [
 MALE_VOICES.extend(["en-US-GuyNeural"] * 10)  # Repeat if needed
 FEMALE_VOICES.extend(["en-US-AriaNeural"] * 5)
 
+# English name lists for character name assignment
+MALE_NAMES = [
+    "Ethan", "James", "Michael", "Daniel", "William", 
+    "Alexander", "Benjamin", "Matthew", "David", "Joseph",
+    "Andrew", "Ryan", "John", "Christopher", "Kevin",
+    "Thomas", "Brandon", "Tyler", "Zachary", "Brian",
+    "Eric", "Aaron", "Justin", "Jason", "Adam"
+]
+
+FEMALE_NAMES = [
+    "Emma", "Olivia", "Sophia", "Ava", "Isabella",
+    "Mia", "Charlotte", "Amelia", "Harper", "Evelyn",
+    "Abigail", "Emily", "Elizabeth", "Sofia", "Avery",
+    "Ella", "Scarlett", "Grace", "Chloe", "Victoria"
+]
+
+# Name mapping: tracks Chinese name -> English name (consistent throughout drama)
+CHARACTER_NAMES = {}  # {speaker_id: english_name}
+
+def assign_english_name(speaker_id: int, speaker_type: str, chinese_text: str = "") -> str:
+    """Assign consistent English name to a Chinese character."""
+    global CHARACTER_NAMES
+    
+    if speaker_id in CHARACTER_NAMES:
+        return CHARACTER_NAMES[speaker_id]
+    
+    # Select name based on speaker type and ID
+    if speaker_type in ["male", "elder"]:
+        name = MALE_NAMES[speaker_id % len(MALE_NAMES)]
+    else:
+        name = FEMALE_NAMES[speaker_id % len(FEMALE_NAMES)]
+    
+    CHARACTER_NAMES[speaker_id] = name
+    return name
+
 # Keywords for speaker detection
 MALE_KEYWORDS = ["他", "老公", "爸爸", "儿子", "哥", "先生", "男士", "男人", "丈夫", "父亲", "男孩", "小哥", "老"]
 FEMALE_KEYWORDS = ["她", "老婆", "妈妈", "女儿", "姐", "女士", "女人", "妻子", "母亲", "女孩", "小姐", "姑"]
@@ -265,11 +300,18 @@ def transcribe_with_diarization(audio_path: str, model_size: str = "medium") -> 
 
 
 def translate_text(text: str) -> str:
-    """Translate Chinese to English."""
+    """Translate Chinese to English with cleanup."""
     import requests
     
     if not text.strip():
         return ""
+    
+    # Clean up text before translation
+    # Remove excessive punctuation and normalize
+    text = re.sub(r'[。！？]{2,}', '！', text)  # Multiple punctuation to single
+    text = re.sub(r'[,，]{2,}', '，', text)
+    text = re.sub(r'\.{2,}', '.', text)
+    text = text.strip()
     
     # Chunk to avoid too long
     chunks = []
@@ -304,13 +346,24 @@ def translate_text(text: str) -> str:
         
         match = re.search(r'<div\s+class=\Wresult-container\W>([^<]+?)<', response.text)
         if match:
-            results.append(match.group(1))
+            translated = match.group(1)
+            # Clean up translation
+            translated = translated.strip()
+            # Fix common translation artifacts
+            translated = re.sub(r'\s+', ' ', translated)  # Multiple spaces to single
+            results.append(translated)
         else:
             results.append(chunk)
         
         time.sleep(0.8)  # Rate limiting
     
-    return " ".join(results)
+    final = " ".join(results)
+    
+    # Final cleanup
+    final = re.sub(r'\s+', ' ', final)  # Normalize spaces
+    final = final.strip()
+    
+    return final
 
 
 def generate_speech_async(text: str, output_path: str, voice: str = "en-US-AriaNeural", rate: str = "+12%"):
@@ -325,43 +378,53 @@ def generate_speech_async(text: str, output_path: str, voice: str = "en-US-AriaN
 
 
 def generate_segment_audio(segments: List[Segment], temp_dir: Path):
-    """Generate TTS for each segment with correct voice based on speaker ID."""
+    """Generate TTS for each segment with correct voice and name."""
     print("Generating audio for each segment...")
     
-    # Track voice per speaker for consistency
+    # Track voice and name per speaker for consistency
     speaker_voice_map = {}  # speaker_id -> voice
+    speaker_name_map = {}   # speaker_id -> english_name
     
     for i, seg in enumerate(segments):
-        # Get unique voice based on speaker type and ID
-        # This ensures 2 different males get different voice tones
-        voice_key = f"{seg.speaker}_{seg.speaker_id}"
+        # Get unique voice and name based on speaker ID
+        # This ensures same character keeps same voice + name throughout
+        if seg.speaker_id not in speaker_voice_map:
+            speaker_voice_map[seg.speaker_id] = get_voice_for_speaker(seg.speaker, seg.speaker_id)
+            speaker_name_map[seg.speaker_id] = assign_english_name(seg.speaker_id, seg.speaker)
         
-        if voice_key not in speaker_voice_map:
-            speaker_voice_map[voice_key] = get_voice_for_speaker(seg.speaker, seg.speaker_id)
-        
-        voice = speaker_voice_map[voice_key]
+        voice = speaker_voice_map[seg.speaker_id]
+        name = speaker_name_map[seg.speaker_id]
         seg.voice = voice
         
         output_file = temp_dir / f"seg_{i}.mp3"
         seg.audio_file = str(output_file)
         
-        print(f"  {i+1}: {seg.text_en[:35]}... [{seg.speaker}#{seg.speaker_id} = {voice}]")
+        print(f"  {i+1}: [{name}] {seg.text_en[:30]}...")
         
         generate_speech_async(seg.text_en, str(output_file), voice)
     
+    print(f"\nCharacters: {speaker_name_map}")
     # Wait for all TTS to complete
     time.sleep(2)
 
 
 def create_subtitle_file(segments: List[Segment], output_path: str):
-    """Create SRT subtitle file."""
+    """Create SRT subtitle file with character names."""
+    # Build name map
+    name_map = {}
+    for seg in segments:
+        if seg.speaker_id not in name_map:
+            name_map[seg.speaker_id] = assign_english_name(seg.speaker_id, seg.speaker)
+    
     with open(output_path, 'w', encoding='utf-8') as f:
         for i, seg in enumerate(segments, 1):
             start_time = format_time(seg.start)
             end_time = format_time(seg.end)
+            name = name_map.get(seg.speaker_id, "Speaker")
+            # Format: CharacterName: Translated text
             f.write(f"{i}\n")
             f.write(f"{start_time} --> {end_time}\n")
-            f.write(f"{seg.text_en}\n\n")
+            f.write(f"[{name}]: {seg.text_en}\n\n")
 
 
 def format_time(seconds: float) -> str:
@@ -450,6 +513,9 @@ def create_dubbed_video(video_path: str, segments: List[Segment], output_path: s
 
 def dub_video(video_path: str, output_path: str):
     """Dub a single video file with multi-voice support."""
+    global CHARACTER_NAMES
+    CHARACTER_NAMES = {}  # Reset name mapping for new video
+    
     print(f"\n{'='*50}")
     print(f"Processing: {Path(video_path).name}")
     print(f"{'='*50}")
