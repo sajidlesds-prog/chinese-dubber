@@ -66,10 +66,21 @@ def extract_audio(video_path: str, audio_path: str):
 
 def transcribe_audio(audio_path: str, model_size: str = "medium") -> list:
     """Transcribe audio using faster-whisper."""
+    import torch
     from faster_whisper import WhisperModel
     
+    # Auto-detect GPU vs CPU
+    if torch.cuda.is_available():
+        device = "cuda"
+        compute_type = "float16"
+        print(f"🚀 Using GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        device = "cpu"
+        compute_type = "int8"
+        print("⚠️ Using CPU")
+    
     print(f"Loading faster-whisper model: {model_size}")
-    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    model = WhisperModel(model_size, device=device, compute_type=compute_type)
     
     print("Transcribing audio...")
     segments, info = model.transcribe(

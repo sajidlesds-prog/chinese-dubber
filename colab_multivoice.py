@@ -223,10 +223,21 @@ def get_voice_for_speaker(speaker_type: str, speaker_id: int) -> str:
 
 def transcribe_with_diarization(audio_path: str, model_size: str = "medium") -> List[Segment]:
     """Transcribe audio with consistent speaker tracking throughout video."""
+    import torch
     from faster_whisper import WhisperModel
     
+    # Auto-detect GPU vs CPU
+    if torch.cuda.is_available():
+        device = "cuda"
+        compute_type = "float16"  # Faster on GPU
+        print(f"🚀 Using GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        device = "cpu"
+        compute_type = "int8"
+        print("⚠️ Using CPU (GPU not available)")
+    
     print(f"Loading faster-whisper: {model_size}")
-    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    model = WhisperModel(model_size, device=device, compute_type=compute_type)
     
     print("Transcribing with VAD...")
     
