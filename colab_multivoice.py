@@ -35,34 +35,62 @@ INPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
-# Voice mapping for different speaker types - multiple options per gender
-SPEAKER_VOICES = {
-    # Male voices (different tones)
-    "male_1": "en-US-GuyNeural",      # Deep male
-    "male_2": "en-US-RyanNeural",    # Medium male
-    "male_3": "en-US-DavisNeural",   # Professional male
-    
-    # Female voices (different tones)
-    "female_1": "en-US-AriaNeural",  # Female adult
-    "female_2": "en-US-JennyNeural",   # Female medium
-    "female_3": "en-US-SaraNeural", # Female light
-    
-    # Child/Elder
-    "child": "en-US-SaraNeural",   
-    "elder": "en-US-EmmaNeural",    
-    
-    "default": "en-US-AriaNeural"
-}
+# Extended voice lists for drama with many characters
+# Up to 25 unique male voices and 20 unique female voices
+MALE_VOICES = [
+    "en-US-GuyNeural",      # Deep male
+    "en-US-RyanNeural",    # Medium male  
+    "en-US-DavisNeural",   # Professional
+    "en-US-AdamNeural",   # Young adult
+    "en-US-BrandonNeural",  # Deep
+    "en-US-ChristopherNeural", # Formal
+    "en-US-CoryNeural",    # Casual
+    "en-US-DanielNeural",  # Standard
+    "en-US-DerekNeural",  # Deep
+    "en-US-DEVINNeural",   # Youthful
+    "en-US-ELIJAHNeural", # Deep
+    "en-US-EthanNeural",   # Young
+    "en-US-FranklinNeural", # Mature
+    "en-US-FredNeural",   # Deep
+    "en-US-GregoryNeural", # Formal
+    "en-US-JacobNeural",  # Young
+    "en-US-JasonNeural", # Standard
+    "en-US-JeffNeural",  # Deep
+    "en-US-JeremyNeural", # Casual
+    "en-US-JoeNeural",   # Deep
+    "en-US-MarcusNeural", # Deep
+    "en-US-MarkNeural",  # Standard
+    "en-US-NathanNeural", # Deep
+    "en-US-PhillipNeural", # Formal
+    "en-US-RichardNeural"  # Mature
+]
 
-# Extended keywords for better detection
-MALE_KEYWORDS = ["他", "老公", "爸爸", "儿子", "哥", "先生", "男士", "男人", "丈夫", "父亲", "男孩", "小哥", "老"]
-FEMALE_KEYWORDS = ["她", "老婆", "妈妈", "女儿", "姐", "女士", "女人", "妻子", "母亲", "女孩", "小姐", "姑"]
-CHILD_KEYWORDS = ["小孩", "孩子", "小朋友", "宝宝", "童", "小孩", "娃"]
-ELDER_KEYWORDS = ["爷爷", "奶奶", "叔叔", "阿姨", "老师", "老爷", "老", "爷爷", "奶奶"]
+FEMALE_VOICES = [
+    "en-US-AriaNeural",     # Standard female
+    "en-US-JennyNeural",    # Medium
+    "en-US-SaraNeural",    # Light
+    "en-US-AdaNeural",     # Young
+    "en-US-AshleyNeural", # Casual
+    "en-US-AudraNeural",   # Deep
+    "en-US-BarbaraNeural", # Mature
+    "en-US-BriannaNeural", # Young
+    "en-US-CamilaNeural", # Youthful
+    "en-US-CarolNeural",   # Standard
+    "en-US-CrystalNeural", # Deep
+    "en-US-DonnaNeural",   # Mature
+    "en-US-EmilyNeural",  # Young
+    "en-US-EvaNeural",    # Light
+    "en-US-FionaNeural",   # Standard
+    "en-US-GraceNeural",  # Light
+    "en-US-HeatherNeural", # Standard
+    "en-US-IsabellaNeural", # Youthful
+    "en-US-JaneNeural",   # Formal
+    "en-US-JuliaNeural"  # Standard
+]
 
-# Voice alternation for same gender - to distinguish 2 males or 2 females
-MALE_VOICES = ["en-US-GuyNeural", "en-US-RyanNeural", "en-US-DavisNeural"]
-FEMALE_VOICES = ["en-US-AriaNeural", "en-US-JennyNeural", "en-US-SaraNeural"]
+# Fallback voices for when we exceed the list
+MALE_VOICES.extend(["en-US-GuyNeural"] * 10)  # Repeat if needed
+FEMALE_VOICES.extend(["en-US-AriaNeural"] * 5)
 
 
 @dataclass
