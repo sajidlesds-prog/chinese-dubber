@@ -153,7 +153,7 @@ def get_voice_for_speaker(speaker_type: str, speaker_id: int) -> str:
 
 
 def transcribe_with_diarization(audio_path: str, model_size: str = "medium") -> List[Segment]:
-    """Transcribe audio with speaker detection."""
+    """Transcribe audio with consistent speaker tracking throughout video."""
     from faster_whisper import WhisperModel
     
     print(f"Loading faster-whisper: {model_size}")
@@ -170,11 +170,10 @@ def transcribe_with_diarization(audio_path: str, model_size: str = "medium") -> 
         word_timestamps=True
     )
     
-    # Group into speaker segments (simple clustering by timestamp gaps)
+    # Group into speaker segments - CONSISTENT tracking throughout video
     results = []
-    current_speaker = 0
-    prev_end = 0
-    gap_threshold = 2.0  # 2 second gap = new speaker
+    speaker_tracking = {}  # speaker_id -> speaker_type (keeps same voice for same person)
+    next_speaker_id = 0
     
     segment_list = list(segments)
     
@@ -184,12 +183,36 @@ def transcribe_with_diarization(audio_path: str, model_size: str = "medium") -> 
         if duration < 0.5:
             continue
         
-        # Detect new speaker by gap
-        if seg.start - prev_end > gap_threshold:
-            current_speaker = 1 - current_speaker
-        
         # Detect speaker type from text
         speaker_type = detect_speaker_type(seg.text)
+        
+        # Check if this segment belongs to an existing speaker based on:
+        # 1. Recent proximity (within 3 seconds = same speaker)
+        # 2. Same speaker type (both male/female)
+        
+        assigned_speaker_id = None
+        
+        # Look at recent segments to find matching speaker
+        for j in range(len(results)-1, max(len(results)-5, -1), -1):
+            if j >= 0:
+                prev = results[j]
+                # If within 3 seconds and same type, likely same speaker
+                if seg.start - prev.end < 3.0 and prev.speaker == speaker_type:
+                    assigned_speaker_id = prev.speaker_id
+                    break
+        
+        # If no match found, assign new speaker ID
+        if assigned_speaker_id is None:
+            # Check if we already have this speaker type tracked
+            for sid, stype in speaker_tracking.items():
+                if stype == speaker_type:
+                    assigned_speaker_id = sid
+                    break
+        
+        if assigned_speaker_id is None:
+            assigned_speaker_id = next_speaker_id
+            next_speaker_id += 1
+            speaker_tracking[assigned_speaker_id] = speaker_type
         
         results.append(Segment(
             start=seg.start,
@@ -197,10 +220,11 @@ def transcribe_with_diarization(audio_path: str, model_size: str = "medium") -> 
             text=seg.text.strip(),
             text_en="",
             speaker=speaker_type,
-            speaker_id=current_speaker
+            speaker_id=assigned_speaker_id
         ))
-        
-        prev_end = seg.end
+    
+    print(f"Found {len(results)} segments, {len(speaker_tracking)} unique speaker(s)")
+    return results
     
     print(f"Found {len(results)} segments")
     return results
