@@ -9,9 +9,12 @@ from pathlib import Path
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 # 将这个工厂函数注册给 huggingface_hub
-from videotrans.util.req_fac import custom_session_factory
-import huggingface_hub
-huggingface_hub.configure_http_backend(backend_factory=custom_session_factory)
+try:
+    from videotrans.util.req_fac import custom_session_factory
+    import huggingface_hub
+    huggingface_hub.configure_http_backend(backend_factory=custom_session_factory)
+except Exception:
+    pass
 
 
 
