@@ -818,9 +818,86 @@ def large_wav_export_with_soundfile(audio_segment, output_path: str):
 
     # 4. 使用 soundfile 写入文件
     #    soundfile 会自动处理文件大小，在需要时切换到 RF64
-    sf.write(
-        output_path,
-        numpy_array,
-        audio_segment.frame_rate,
-        subtype='PCM_16' if sample_width == 2 else ('PCM_24' if sample_width == 3 else 'PCM_32')  # 根据需要选择子类型
-    )
+        sf.write(
+            output_path,
+            numpy_array,
+            audio_segment.frame_rate,
+            subtype='PCM_16' if sample_width == 2 else ('PCM_24' if sample_width == 3 else 'PCM_32')  # 根据需要选择子类型
+        )
+
+
+def get_video_resolution(video_path: str) -> tuple:
+    """Get video resolution (width, height) using ffprobe"""
+    import json
+    try:
+        cmd = [
+            'ffprobe', '-v', 'quiet', '-print_format', 'json',
+            '-show_streams', '-select_streams', 'v:0', video_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout)
+        stream = data['streams'][0]
+        return int(stream['width']), int(stream['height'])
+    except Exception as e:
+        logger.warning(f"Failed to get video resolution: {e}")
+        return (1920, 1080)  # Default 1080p
+
+
+def blur_subtitle_region(input_video: str, output_video: str, x: int = 0, y: int = 0,
+                        width: int = 0, height: int = 0, auto_bottom: bool = True) -> bool:
+    """
+    Blur a region of video where hardcoded subtitles are (typically bottom of screen)
+    
+    Args:
+        input_video: Input video path
+        output_video: Output video path
+        x, y: Top-left corner of blur region
+        width, height: Size of blur region
+        auto_bottom: If True, automatically blur bottom 15% of video
+    
+    Returns:
+        bool: True if successful
+    """
+    try:
+        # Get video resolution
+        video_width, video_height = get_video_resolution(input_video)
+        
+        # Auto-detect bottom region if enabled
+        if auto_bottom:
+            # Blur bottom 15% of video where subtitles typically appear
+            y = int(video_height * 0.85)
+            height = int(video_height * 0.15)
+            x = 0
+            width = video_width
+        
+        # If specific region provided, use it
+        if width <= 0 or height <= 0:
+            logger.warning("Invalid blur region dimensions, skipping blur")
+            return False
+        
+        # Ensure coordinates are within video bounds
+        x = max(0, min(x, video_width - 1))
+        y = max(0, min(y, video_height - 1))
+        width = min(width, video_width - x)
+        height = min(height, video_height - y)
+        
+        # Build ffmpeg filter for blurring region
+        blur_filter = (
+            f"[0:v]crop={width}:{height}:{x}:{y},boxblur=15[blurred];"
+            f"[0:v][blurred]overlay={x}:{y}"
+        )
+        
+        cmd = [
+            '-y', '-i', os.path.basename(input_video),
+            '-filter_complex', blur_filter,
+            '-c:a', 'copy',
+            '-c:v', 'libx264', '-crf', '23', '-preset', 'veryfast',
+            os.path.basename(output_video)
+        ]
+        
+        logger.debug(f"Blurring subtitle region: x={x}, y={y}, w={width}, h={height}")
+        return runffmpeg(cmd, cmd_dir=str(Path(input_video).parent))
+        
+    except Exception as e:
+        logger.error(f"Failed to blur subtitle region: {e}")
+        return False

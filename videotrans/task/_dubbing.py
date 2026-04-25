@@ -203,6 +203,21 @@ class DubbingSrt(BaseTask):
 
         self.queue_tts = queue_tts
 
+        # Add emotion detection for Edge TTS if enabled
+        if params.get("edge_tts_emotion_enabled", True) and self.cfg.tts_type == tts.EDGE_TTS:
+            target_lang = self.cfg.target_language_code[:2].lower()
+            if target_lang in ("zh", "en"):
+                try:
+                    from videotrans.util.sentiment import detect_sentiment
+                    for item in self.queue_tts:
+                        if not item.get('text', '').strip():
+                            item['emotion'] = None
+                            continue
+                        emotion = detect_sentiment(item['text'], target_lang)
+                        item['emotion'] = emotion
+                except Exception as e:
+                    logger.warning(f"Failed to add emotion to queue_tts: {e}")
+
         if not self.queue_tts or len(self.queue_tts) < 1:
             raise RuntimeError(tr('No subtitles required'))
         # 具体配音操作

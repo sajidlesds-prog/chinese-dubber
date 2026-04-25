@@ -814,12 +814,16 @@ class TransCreate(BaseTask):
         if self._exit(): return
         # 音频翻译， 提取模式 无需合并
         if self.is_audio_trans or self.cfg.app_mode == 'tiqu' or not self.shoud_hebing:
-            return
-        if self.precent < 95:
-            self.precent += 3
-        self._signal(text=tr('kaishihebing'))
-        try:
-            self._join_video_audio_srt()
+            return True
+
+        # Blur hardcoded subtitles if enabled (for dramas with burned-in subs)
+        if params.get("blur_subtitle_area", False):
+            self._blur_hardcoded_subtitles()
+
+        if self.is_audio_trans or self.cfg.app_mode == 'tiqu' or not self.shoud_hebing:
+            return True
+
+        self._join_video_audio_srt()
         except Exception as e:
             self.hasend = True
             raise
@@ -1289,6 +1293,43 @@ class TransCreate(BaseTask):
             logger.debug(f"视频定格应延长{duration_ms}ms，实际向上取整秒延长{sec}s,操作成功。")
         else:
             logger.warning("视频定格延长操作失败！")
+
+    # Blur hardcoded subtitles in drama videos
+    def _blur_hardcoded_subtitles(self) -> None:
+        """Blur the region where hardcoded subtitles appear"""
+        if not params.get("blur_subtitle_area", False):
+            return
+        
+        logger.debug("Blurring hardcoded subtitle region...")
+        self._signal(text=tr("Blurring hardcoded subtitles..."))
+        
+        from videotrans.util.help_ffmpeg import blur_subtitle_region
+        
+        # Get blur region from config
+        x = int(params.get("blur_subtitle_x", 0))
+        y = int(params.get("blur_subtitle_y", 0))
+        width = int(params.get("blur_subtitle_width", 0))
+        height = int(params.get("blur_subtitle_height", 0))
+        auto_bottom = params.get("blur_subtitle_auto", True)
+        
+        # Temporary file for blurred video
+        blurred_video = f"{self.cfg.cache_folder}/blurred_novoice.mp4"
+        
+        # Apply blur to novoice_mp4 (video without audio)
+        success = blur_subtitle_region(
+            input_video=self.cfg.novoice_mp4,
+            output_video=blurred_video,
+            x=x, y=y, width=width, height=height,
+            auto_bottom=auto_bottom
+        )
+        
+        if success and Path(blurred_video).exists():
+            # Replace novoice_mp4 with blurred version
+            shutil.copy2(blurred_video, self.cfg.novoice_mp4)
+            logger.debug("Hardcoded subtitles blurred successfully")
+        else:
+            logger.warning("Failed to blur hardcoded subtitles, continuing without blur")
+
 
     # 最终合成视频
     def _join_video_audio_srt(self) -> None:

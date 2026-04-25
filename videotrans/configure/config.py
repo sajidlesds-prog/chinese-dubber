@@ -183,7 +183,7 @@ class AppSettings:
     hf_token: str = ""
     proxy:str=''
 
-    _json_path: str = f"{ROOT_DIR}/videotrans/cfg.json"
+        _json_path: str = f"{ROOT_DIR}/cfg.json"
     WHISPER_MODEL_LIST:List=field(default_factory=list,repr=False)
     ChatTTS_voicelist:List=field(default_factory=list,repr=False)
     Whisper_CPP_MODEL_LIST:List=field(default_factory=list,repr=False)
@@ -460,7 +460,7 @@ class AppParams:
     """
     AppParams: 对应 params.json，包含 getset_params 功能
     """
-    _json_path: str = f"{ROOT_DIR}/videotrans/params.json"
+    _json_path: str = f"{ROOT_DIR}/params.json"
 
     def __post_init__(self):
         self.getset_params()
@@ -630,6 +630,14 @@ class AppParams:
             "ttsapi_emotion": "happy",
             "minimaxi_apikey": "",
             "minimaxi_emotion": "",
+            "edge_tts_emotion_enabled": True,
+            # Subtitle blur settings for dramas with hardcoded subtitles
+            "blur_subtitle_area": False,
+            "blur_subtitle_x": 0,
+            "blur_subtitle_y": 0,
+            "blur_subtitle_width": 0,
+            "blur_subtitle_height": 0,
+            "blur_subtitle_auto": True,  # Auto-detect bottom region
             "minimaxi_apiurl": "api.minimaxi.com",
             "minimaxi_model": "speech-02-turbo",
             

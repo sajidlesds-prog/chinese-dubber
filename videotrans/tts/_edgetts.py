@@ -31,8 +31,21 @@ class EdgeTTS(BaseTTS):
         # 默认跟随设置使用代理，如果不想使用，单独根目录下创建 edgetts-noproxy.txt 文件
         self.useproxy=None if not self.proxy_str or Path(f'{ROOT_DIR}/edgetts-noproxy.txt').exists() else self.proxy_str
         
-
-
+    def _wrap_ssml(self, text: str, emotion: str, rate: str, volume: str, pitch: str) -> str:
+        """Wrap text in SSML with Edge TTS emotion and prosody settings."""
+        from xml.sax.saxutils import escape
+        text_escaped = escape(text)
+        return (
+            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
+            f'xmlns:mstts="https://www.w3.org/2001/mstts">'
+            f'<mstts:express-as style="{emotion}">'
+            f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">'
+            f'{text_escaped}'
+            f'</prosody>'
+            f'</mstts:express-as>'
+            f'</speak>'
+        )
+        
     async def increment_counter(self):
         async with self.lock:
             self.ends_counter += 1
@@ -58,10 +71,22 @@ class EdgeTTS(BaseTTS):
                         
                         if attempt>0:
                             msg= f'Retry after {attempt}nd  '
-                        communicate = Communicate(
-                            item['text'], voice=item['role'], rate=self.rate,
-                            volume=self.volume, proxy=self.useproxy, pitch=self.pitch, connect_timeout=5
-                        )
+                        text = item['text']
+                        emotion = item.get('emotion')
+                        rate = item.get('rate', self.rate)
+                        volume = item.get('volume', self.volume)
+                        pitch = item.get('pitch', self.pitch)
+                        
+                        if emotion:
+                            text = self._wrap_ssml(text, emotion, rate, volume, pitch)
+                            communicate = Communicate(
+                                text, voice=item['role'], proxy=self.useproxy, connect_timeout=5
+                            )
+                        else:
+                            communicate = Communicate(
+                                text, voice=item['role'], rate=rate,
+                                volume=volume, proxy=self.useproxy, pitch=pitch, connect_timeout=5
+                            )
                         # 防止WebSocket连接或数据读取无限挂起
                         await asyncio.wait_for(
                             communicate.save(item['filename'] + ".mp3"),
